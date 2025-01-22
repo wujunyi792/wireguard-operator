@@ -30,6 +30,7 @@ import (
 var k8sClient client.Client
 var releasePath string
 var agentImage string
+var sidecarImage string
 var managerImage string
 var kindBinary string
 var kubeConfigPath string
@@ -113,12 +114,14 @@ func KubectlApply(resource string, namespace string) (string, error) {
 var _ = BeforeSuite(func() {
 	releasePath = os.Getenv("WIREGUARD_OPERATOR_RELEASE_PATH")
 	agentImage = os.Getenv("AGENT_IMAGE")
+	sidecarImage = os.Getenv("SIDECAR_IMAGE")
 	managerImage = os.Getenv("MANAGER_IMAGE")
 	kindBinary = os.Getenv("KIND_BIN")
 	kubeConfigPath = os.Getenv("KUBE_CONFIG")
 
 	Expect(releasePath).NotTo(Equal(""))
 	Expect(agentImage).NotTo(Equal(""))
+	Expect(sidecarImage).NotTo(Equal(""))
 	Expect(releasePath).NotTo(Equal(""))
 	Expect(managerImage).NotTo(Equal(""))
 	Expect(kindBinary).NotTo(Equal(""))
@@ -186,6 +189,13 @@ var _ = BeforeSuite(func() {
 		return
 	}
 
+	if _, err := exec.
+		Command(kindBinary, "load", "docker-image", sidecarImage, "--name", testClusterName).
+		Output(); err != nil {
+		log.Error(err, "unable to load local image sidecar:dev")
+		return
+	}
+
 	// simulate what users exactly do in real life.
 	b, err := exec.
 		Command("kubectl", "apply", "-f", releasePath, "--context", testKindContextName).
@@ -210,6 +220,8 @@ var _ = BeforeSuite(func() {
 		"configmap/wireguard-manager-config",
 		"service/wireguard-controller-manager-metrics-service",
 		"deployment.apps/wireguard-controller-manager",
+		"service/hello-kubernetes",
+		"deployment.apps/hello-kubernetes",
 	}
 
 	Expect(strings.Split(strings.Trim(strings.ReplaceAll(string(b), " created", ""), "\n"), "\n")).To(BeEquivalentTo(expectedResources))

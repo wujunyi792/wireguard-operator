@@ -19,18 +19,18 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+
 	vpnv1alpha1 "github.com/jodevsa/wireguard-operator/pkg/api/v1alpha1"
 	"github.com/jodevsa/wireguard-operator/pkg/controllers"
 	v1 "k8s.io/api/core/v1"
-	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -55,6 +55,8 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var wgImage string
+	var wgSidecarImage string
+	var wgSidecarImagePullPolicy string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&wgImage, "agent-image", "", "The image used for wireguard server")
@@ -62,6 +64,9 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&agentImagePullPolicy, "agent-image-pull-policy", "IfNotPresent", "Use userspace implementation")
+	flag.StringVar(&wgSidecarImage, "sidecar-image", "ghcr.io/jodevsa/wireguard-operator/sidecar:latest", "The image used for wireguard sidecar")
+	flag.StringVar(&wgSidecarImagePullPolicy, "sidecar-image-pull-policy", "IfNotPresent", "imagePullPolicy for wireguard sidecar")
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -102,6 +107,15 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WireguardPeer")
+		os.Exit(1)
+	}
+	if err = (&controllers.WireguardSidecarReconciler{
+		Client:                 mgr.GetClient(),
+		Scheme:                 mgr.GetScheme(),
+		SidecarImage:           wgSidecarImage,
+		SidecarImagePullPolicy: v1.PullPolicy(wgSidecarImagePullPolicy),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WireguardSidecar")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
